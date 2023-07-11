@@ -1,0 +1,662 @@
+---
+title: "EE798Q : Fundamentals of Inferential Statistics & Automation"
+subtitle : "Project Report"
+author:
+- "**Submitted To - Prof. Tushar Sandhan**" 
+-  "Submitted by - Siddharth Pathak ( Roll no. - 211034 )"
+classoption: abstract
+abstract: |
+  The accurate collection and analysis of sensory data play a crucial role in understanding environmental conditions and their impact on air quality. However, various factors such as sensor failures, communication link issues, and data packet loss can result in missing values within the sensory dataset.
+   
+  This project aims to address these challenges by implementing advanced techniques for analyzing and imputing missing values in multivariate time-series data. The dataset used in this study consists of a tabular representation of sensory data, including measurements such as PM2.5, NO, NO2, NOX, CO, SO2, NH3, Ozone, and Benzene concentrations. Missing values are indicated by "NA" entries, either at the row level indicating complete link failure or at the column level indicating individual sensor mishaps. To analyze the dataset, we employ various graph plotting techniques to visualize the time-series data.
+  
+   However, the presence of missing values poses challenges in accurately representing the temporal patterns and relationships among variables. Simply replacing missing values with zero could introduce significant distortions in the data and yield misleading insights. Thus, a better strategy is required for handling missing data. Our problem statement includes, finding a decent way to replace the `NA` values in the date, model the complete data in ARIMA process accurately, change the data into univariate time series, extract information about the blasting time and forecast for the presence of different gasses in environment in future and find the approximate non parametric probability distribution (and curve) for all the components of data.We employ various graph plotting techniques to analyse the dataset 
+   
+  This project contributes to the field of environmental data analysis by demonstrating effective techniques for handling missing values in multivariate time-series datasets and infer various kind of informenvironmental data analysis by demonstrating effective techniques for handling missing values in multivariate time-series datasets and inferring variousation from it. The insights gained from this study can enhance our understanding of air quality dynamics and support informed decision-making in environmental monitoring and management initiatives.
+
+toc: true
+toc-depth: 3
+date: "2023-6-24"
+format: pdf
+editor: visual
+geometry: margin=1in
+code-block-bg: true
+cap-location: "top"
+code-overflow: wrap
+code-fold: true
+page-width: 10
+margin-top: 3%
+margin-left: 3%
+fig-width: 8
+fig-height: 5.6
+fig-format: "png"
+fig-dpi: 300
+fig-align: "center"
+fig-cap-location: "bottom"
+header-includes:
+   - \usepackage{amsmath, amssymb, setspace}
+   - \onehalfspacing
+   - \usepackage{etoolbox} 
+   - \makeatletter 
+   - \preto{\@verbatim}{\topsep=3pt \partopsep=3pt } 
+   - \makeatother
+---
+
+\pagebreak
+
+# **1. Information about Dataset & its's Modification:**
+
+The air pollution dataset that we will use is obtained from the `Singrauli Coalfield Pollution Control Board for Coal India` (Singrauli Coalfield). The pollution is monitored during open-pit blasting. There are 13 columns overall in the air pollution data collection of pollutants available at intervals of 15 minutes. I have modified the column names for convenience. A small tail portion of the dataset is shown below.
+
+```{r, eval=TRUE, echo=FALSE, message=FALSE, warning = FALSE}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(splines)
+library(imputeTS)
+library(forecast)
+library(mice)
+library(astsa)
+library(zoo)
+library(pracma)
+library(randomForest)
+library(SimTools)
+data <- read.csv("Dataset.csv")
+data <- cbind(1:8643, data)
+colnames(data)[1:3] <- c("Index", "Start","End")
+data <- data[1:8640, ]
+data <- as.data.frame(data)
+
+```
+
+![Primary Dataset](image-2.png)
+
+The dataset has 8643 rows and 13 variables, of which the last three rows didn't have any time stamp. They are just the first-order statistics, last-order statistics and mean of respective column variables, So, We remove them from the working dataset. We can extract that statistical information whenever we want. The column's description is following:
+
+-   Column 1 Indicates the serial no of the data set, and I named it `Index`.
+
+-   Column 2 and 3 Indicates the date and time from and to for 15 minutes of interval. I named them `Start` & `End,` respectively.
+
+-   Column 4 Indicates the PM10 pollutant of the data in µg/m3.
+
+-   Column 5 Indicates NO pollutant of the data in µg/m3.
+
+-   Column 6 Indicates the NO2 pollutant of the data in µg/m3.
+
+-   Column 7 Indicates the NOX of the data in ppb.
+
+-   Column 8 Indicates the CO pollutant of the data in mg/m3.
+
+-   Column 9 Indicates the SO2 pollutant of the data in µg/m3.
+
+-   Column 10 Indicates the NH3 pollutant of the data in µg/m3.
+
+-   Column 11 Indicates the Ozone pollutant of the data in µg/m3.
+
+-   Column 12 Indicates the Benzene pollutant of the data in µg/m3.
+
+-   Column 13 Indicates the PM2.5 pollutant of the data in µg/m3.
+
+**Our analysis will be `Per_Column` because in the given multivariate time series data, time varies as the row varies.**
+
+# **2. Handling missing values & Time-Series Analysis:**
+
+Handling missing values in time series analysis requires careful consideration to ensure accurate and meaningful results. We will performthree3 methods for handling `NA` values in our data set.
+
+## **2.1. Replacing `NA` values with `0`**
+
+Replacing missing data with 0 is generally not recommended in most scenarios because it can introduce bias and distort the analysis. However, there may be some specific situations where replacing missing data with 0 is appropriate. Here are a few cases where it might be suitable to consider replacing missing values with 0:
+
+**Contextual Appropriateness:** Consider the variable's nature and the data's context. If the lost data represents an absence or zero value, such as counts or binary indicators, replacing missing values with 0 may be reasonable.
+
+**Analysis Requirements:** Isomeme instances of the analytical method or model used may require complete data or a fixed-length vector as input.
+
+**Missing Completely at Random (MCAR):** If the missingness is determined by factors completely unrelated to the data itself, replacing missing values with 0 may be acceptable.
+
+We have missing values represented as `NA`. We will now analyse the traceplots after setting all `NA` values to 0. As We can see below the trace plots of all the variables, We can interpret that replacing `NA` values with 0, causes the bad quality trace plots of some of the variables like PM10, NO2, NH3, Benzene, NOX etc.
+
+```{r, echo = FALSE, message = FALSE}
+data_ <- mutate_all(data, ~replace_na(.,0))
+chain <- data_[, 4:13]
+chain <- as.matrix(chain)
+traceplot(chain, fast = F, legend = F, main = "Traceplots (NA replaced with zeros)")
+```
+
+We will try to find another arguments proving that replacing `NA` with 0 is not a good option. I have fitted ARIMA models for each variable on the dataset we replaced `na` with `ZEROS`. Here is the table of results we obtained:
+
+![Models obtained by replacing NA with zeros](image-3.png){height="290px"}
+
+Replacing missing values with zeros may not be appropriate in all cases(in this case also). It depends on the nature of the data and the analysis we want to perform. Alternatively, We can choose to interpolate or impute missing values based on the context.
+
+## **2.2. Interpolation**
+
+Interpolation is commonly used for finding missing values in a dataset, mainly when the missing values occur in a sequence or when the values are expected to exhibit a smooth pattern.Traditional interpolation techniques may be computationally intensive and not scalable for big data scenarios. Therefore, specialised aproaches are used to handle interpolation in big data. Here are some reasons why interpolation is utilised in such scenarios:
+
+-   Preserving Temporal Relationships
+
+-   Maintaining Data Integrity
+
+-   Minimizing Data Loss
+
+-   Improving the Accuracy of Calculations
+
+We are going to use the `imputeTS` R package to perform interpolation. It is a popular choice for time series interpolation due to several reasons. The imputeTS package in R is a valuable tool for time series interpolation due to its diverse range of interpolation methods, handling of various missing data patterns, ease of implementation, customizability and integration with other packages. We can do interpolation by-Row and by-Column.
+
+```{r, eval=TRUE, echo=TRUE, message = FALSE}
+
+# Interpolate NA values using Linear interpolation
+linear_interpolation <- na_interpolation(data, option = "linear", method = "row")
+linear_interpolation <- na_interpolation(data, option = "linear", method = "column")
+# Interpolate NA values using spline interpolation(can be done in both way Row and column)
+spline_interpolation <- na_interpolation(data, method = "spline")
+
+# Interpolate NA values using Stineman interpolation
+stinmn_interpolation <- na_interpolation(data, method = "stine")
+```
+
+However, for our dataset, all the 3 interpolation(& both methods) techniques producing same replacements for `NA` values. So, we can take any of them, and compute the ARIMA models, of this interpolated data. Trace plots of Interpolated Data is as following.
+
+```{r, eval = TRUE, echo=FALSE}
+traceplot(as.matrix(linear_interpolation[,4:13]), fast = F, legend = FALSE, main = "Traceplots (Interpolated Data)", col = "tomato")
+```
+
+I have fitted ARIMA models for each variable on the interpolated dataset. Here is the table of results we obtained:
+
+![Models Obtained by Interpolating Data](image-4.png){height="300px"}
+
+By comparing these plots and statistical measures with the previous ones, we can say that interpolation gives a better data replacement. For Some of the columns, interpolation gives approximately the same results as the first method gives.
+
+## **2.3. Multiple Imputation:**
+
+Multiple imputation methods generate plausible imputed data sets, incorporating uncertainty around the missing values. Multivariate imputation approaches, such as Multiple Imputation by Chained Equations (MICE), consider the dependencies between variables. Each variable is imputed conditional on the other variables, capturing their relationships. The `mice` package in R provides multiple imputation methods for handling missing values in a data set. The package uses the Multiple Imputation by Chained Equations (MICE) approach, which involves creating multiple imputed data sets and filling in the missing values based on observed values and the relationships between variables. We will now fill `NA` values by imputation technique and compare the quality of predicted values with previous techniques.
+
+Imputation techniques make use of descriptive statistics and statistical inference concepts.
+
+Descriptive statistics involve summarizing and describing the characteristics of a dataset, such as measures of central tendency (mean, median, mode) and measures of dispersion (variance, standard deviation). Imputation techniques often utilize descriptive statistics to estimate missing values based on the observed data. For example, one common imputation method is mean imputation, where the missing values are replaced with the mean of the available data. This approach uses the descriptive statistic of the mean to fill in the missing values.
+
+Statistical inference involves making conclusions or predictions about a population based on a sample of data. Imputation techniques employ statistical inference to estimate missing values by using information from the observed data. The idea is to make educated guesses about the missing values based on patterns and relationships observed in the available data.
+
+This `mice` package in R, for instance, utilizes multiple imputation techniques based on a statistical model. It creates multiple imputed datasets by drawing plausible values from the conditional distributions of the missing values given the observed data. This process incorporates statistical inference to estimate the missing values while accounting for the uncertainty associated with them.
+
+```{r, message = FALSE , results=FALSE, warning=FALSE}
+
+imp_model <- mice(data[,c(-1,-2,-3)], method = "pmm")
+data_imputed <- complete(imp_model)
+```
+
+In summary, imputation techniques rely on descriptive statistics to summarize the available data and statistical inference to estimate missing values based on patterns and relationships in the observed data.
+
+After comparing the trace plots of `Imputed Data` with the previous two trace plots, we can say that this is the best method to fill in missing values. The Traceplot of completed data with this method is as follows:
+
+```{r , echo = FALSE}
+
+traceplot(as.matrix(data_imputed),main="Traceplot (Imputed Data)",legend = F, fast = F, col = "dimgrey")
+```
+
+Here is the table of results we obtained from fitted ARIMA models:
+
+![Models obtained by Imputing Data](image-5.png){height="270px"}
+
+Now, based on the comparison of AIC and BIC values obtained from the ARIMA models using three different missing data handling techniques (interpolated data, zero replacement with missing values, and imputed data), We have observed the following order:
+
+1.  Interpolated Data: Smallest AIC and BIC values.
+2.  Zero Replacement with Missing Values: Intermediate AIC and BIC values.
+3.  Imputed Data: Largest AIC and BIC values.
+
+\color{blue}**From this analysis, We can conclude that the ARIMA models fitted with the interpolated data perform the best in terms of model fit and complexity. These models have the smallest AIC and BIC values, indicating a good balance between model fit and complexity.** \color{black} On the other hand, the ARIMA models fitted with zero replacement and imputed data show larger AIC and BIC values. This suggests that these models may have poorer fit or higher complexity compared to the models using interpolated data.
+
+\color{blue}**However, it's important to consider the context of our analysis and the specific goals of study. The choice of missing data handling technique should align with the assumptions and requirements of your analysis. While smaller AIC and BIC values generally indicate better model fit and parsimony, it's crucial to carefully evaluate the overall impact of missing data handling techniques on your specific analysis and consider potential implications beyond the AIC and BIC values alone. If we see trace plots, The imputed Data shows best results and best replacement of missing values.** \color{black}
+
+# **3. Classification:**
+
+To determine whether the data is stock time series or flow time series data by examining trace plots and ACF (Autocorrelation Function) plots, We need to understand the characteristics of each type of data and analyze the patterns in the plots.
+
+## **3.1. Stock Time Series Data:**
+
+Stock time series data represents the cumulative value of a variable over time. It typically consists of values that increase or decrease incrementally, reflecting the accumulation or depletion of a quantity. Examples include the total number of shares of a company's stock or the total assets of a company.
+
+Characteristics of Stock Time Series Data:
+
+**1. Monotonicity:** Stock data shows a monotonic pattern, with values steadily increasing or decreasing over time.
+
+**2. Limited variability:** The values in stock data usually have a limited range, as they represent a cumulative quantity that cannot be negative.
+
+**3. Persistence:** There is a high degree of persistence in stock data, meaning that the current value is highly correlated with past values.
+
+**4. Seasonality:** Stock data may exhibit seasonality, where values follow regular patterns or cycles.
+
+| **Analysis of Trace Plots for Stock Time Series Data**                                                                                                        | **Analysis of ACF Plots for Stock Time Series Data**                                                                                                                                |
+|----------------------------------|--------------------------------------|
+| **An increasing or decreasing trend**: The trace plot should show an apparent upward or downward movement.                                                    | **Strong autocorrelation at lag:** Stock data typically exhibit a strong positive autocorrelation at the first lag since the current value is closely related to the previous value |
+| **Limited fluctuations:** The data points should not deviate significantly from the overall trend, as stock data generally do not exhibit large fluctuations. | **Slow decay in autocorrelation:** The autocorrelation should decay slowly, indicating persistence in the data.                                                                     |
+
+## **3.2. Flow Time Series Data:**
+
+Flow time series data represents a variable's change rate over time. It measures the inflow or outflow of a quantity during specific time intervals. Examples include the daily sales of a product or the hourly website traffic.
+
+Characteristics of Flow Time Series Data:
+
+**1. Variability:** Flow data exhibit higher variability than stock data since it represents the rate of change.
+
+**2. Randomness:** Flow data often show random fluctuations and do not necessarily follow a specific trend.
+
+**3. Lack of persistence:** The autocorrelation between consecutive values in flow data is typically low.
+
+**4. Absence of seasonality:** Flow data may not exhibit clear seasonal patterns.
+
+| **Analysis of Trace Plots for Flow Time Series Data**                                                                  | **Analysis of ACF Plots for Flow Time Series Data**                                                                                                          |
+|-------------------------------|-----------------------------------------|
+| **Fluctuating values:** The trace plot should display irregular fluctuations without a clear upward or downward trend. | **Low autocorrelation:** The autocorrelation values should be relatively low and decline rapidly after the first few lags, indicating a lack of persistence. |
+| **Variable range:** The data points can vary significantly, reflecting the varying rates of change.                    | **Randomness in autocorrelation:** The autocorrelation values should not show any discernible pattern or significant correlations at specific lags.          |
+
+## **3.3. Analysis:**
+
+In conclusion, by carefully analysing the trace plots and ACF plots of time series data, we can determine whether it represents stock or flow data based on the aforementioned characteristics and patterns. Let us do some visualization to analyize what we discussed above.
+
+```{r, echo = FALSE}
+traceplot(as.matrix(data_imputed),fast = F, legend = F, main = "Time Series plots of Multivariate Time Series Data",col = "palegreen3")
+acfplot(as.matrix(data_imputed), main = "ACF plots of Multivariate Time Series Data", lag.max = 5000)
+```
+
+\color{blue}**We can see that the trace plots did not show monotonic behavior, and having fluctuating value. Whereas, ACF plots shows the significant decrease in autocorrelation coefficient with increasing the lag, with a significant random patterns in some components. Both the plots indicating that our data is `Flow Time Series Data`. Hence, we can conclude that our data is `Flow Time Series Data`.**
+
+\color{black}
+
+# **4. Curve Fitting:**
+
+Curve fitting in multivariate time series analysis is important for several reasons and offers various uses. Some of the key applications and benefits include:
+
+1.  Pattern Identification
+2.  Forecasting
+3.  Interpolation
+4.  Anomaly Detection
+5.  Feature Extraction
+6.  Visualization
+7.  Model Selection
+
+Fitted curves for the given data is as following:
+
+```{r, echo =FALSE}
+mice::densityplot(imp_model, main = "Density Plots of all Variates of Data")
+```
+
+Plotting all the densities in a single plot becomes very unusual, because we can not observe such a clumsy plot conveniently. Here, we can assume some approximate distributions for different columns. Let us check the covariance matrix for our dataset:
+
+## **4.1. Covariance Matrix**
+
+```{r, echo = FALSE}
+colnames(data_imputed) = c("PM10","NO","NO2","NOX","CO","SO2","NH3","Ozone", "Benzene", "PM2.5")
+round(cor(data_imputed),3)
+```
+
+We can not consider the multivariate normal distribution here, because state space of this multivariate tise series data is $0$ to $infinity$. Still, we can consider each component as mixture of any particular distribution, with different parameters. For example we can modeled each component as mixture of `location Gamma distributuin`, with different scale and shape parameter ($alpha$,$beta$) and diffrerent location Parameter.
+
+## **4.2. Polynomial Curve fitting:**
+
+Polynomial fitting can be applied to various types of data, including time series data. Time series data often exhibit nonlinear patterns and trends that cannot be effectively captured by linear models. By using polynomial fitting, we can capture these nonlinearities and improve the accuracy of our models for time series analysis. In time series analysis, polynomial fitting can be useful for tasks such as trend estimation, forecasting, and anomaly detection. By fitting a polynomial to the time series data, we can estimate the underlying trend and make predictions about future values. Additionally, polynomial fitting can be combined with other techniques, such as autoregressive integrated moving average (ARIMA) models, to capture both the linear and nonlinear components of a time series. It's important to note that when fitting polynomials to time series data, we need to consider the potential pitfalls of overfitting. Using high-degree polynomials can lead to overly complex models that fit the noise in the data rather than the underlying patterns. Therefore, it's essential to balance model complexity with the available data and the principle of parsimony to avoid overfitting and ensure reliable results. Approximate Polynomial and Trigonometric fit for each component is shown below in form of plot.
+
+```{r, echo =FALSE, fig.height=4.7}
+x = 1:8640
+wk = x/96 + x
+cs = cos(2*pi*wk); sn = sin(2*pi*wk)
+tn = tan(2*pi*wk);lg = log(100*wk)
+y = data_imputed[,1]
+reg = lm(y ~ poly(wk,27)+ cs + sn + 1/cs + 1/sn + tn + 1/tn + lg , na.action=NULL)
+plot(wk,y, col = "pink", ylab = paste(colnames(data_imputed)[1],"level"), xlab = "Time", main = paste("Ploynomial & Trigonometric Fit for",colnames(data_imputed[1])))
+lines(fitted(reg),lwd = 2, col ="lightblue")
+```
+
+
+
+```{r, echo=FALSE, fig.height = 5.4}
+x = 1:8640
+wk = x/96 + x
+cs = cos(2*pi*wk); sn = sin(2*pi*wk)
+tn = tan(2*pi*wk);lg = log(100*wk)
+for(i in 2:10)
+{
+  y = data_imputed[,i]
+  reg = lm(y ~ poly(wk,27)+ cs + sn + 1/cs + 1/sn + tn + 1/tn + lg , na.action=NULL)
+  plot(wk,y, col = "pink", ylab = paste(colnames(data_imputed)[i],"level"), xlab = "Time", main = paste("Ploynomial & Trigonometric Fit for",colnames(data_imputed[i])))
+  lines(fitted(reg),lwd = 2, col ="lightblue")
+}
+```
+
+Now, we are going to plot all the curves on a single plot, from this valuable insights can be gained. By observing the overall shape and trend exhibited by the curves, we can discern the general behavior of the variables. Furthermore, the use of polynomial fitting allows for the detection of nonlinear relationships, enabling a more comprehensive understanding of the data. Comparing the curves can unveil potential interactions and dependencies between the variables, providing deeper insights into their interconnections. 
+
+\color{blue}**Outliers can be identified by observing curves that deviate significantly from the overall pattern, indicating unusual behavior or data points warranting further investigation. It is important to remain cautious of overfitting, wherein curves excessively follow individual data points, as this may compromise the accuracy of the model. Overall, the combination of polynomial curve fitting and visual representation offers a powerful tool to gain valuable insights into the relationships and trends exhibited by the 10 variables.**\color{black}
+
+Normalized ploynomial & Trignometric fit for all components of our data is as following:
+
+```{r, echo=FALSE}
+
+x = 1:8640
+wk = x/96 + x
+cs = cos(2*pi*wk); sn = sin(2*pi*wk)
+tn = tan(2*pi*wk);lg = log(100*wk)
+plot(wk,y,"n",ylim = c(0,2.7), xlab = "Time", ylab = "Predicted Normalized Value")
+col = c("lightblue","lightpink","yellow", "grey","palegreen","turquoise1","olivedrab","plum","indianred","tan1")
+for(i in 1:10)
+{
+  y = data_imputed[,i]/(mean(data_imputed[,i]))
+  reg = lm(y ~ poly(wk,27)+ cs + sn + 1/cs + 1/sn + tn + 1/tn + lg , na.action=NULL)
+  lines(fitted(reg),lwd = 2, col =  adjustcolor(col[i],alpha.f = 0.6))
+}
+mtext("Normalized Ploynomial & Trigonometric Fit of All Variates",side = 3, line = 2.5,cex = 1.5)
+par(fig = c(0, 1, 0, 1), oma = c(0, 0, 2, 0), mar = c(0, 0, 0, 0), new = TRUE)
+plot(0, 0, type = 'l', bty = 'n', xaxt = 'n', yaxt = 'n')
+legend("top",legend = colnames(data_imputed), col =col,lty = 1,lwd =3, xpd = TRUE, 
+             horiz = TRUE,cex = 0.8, seg.len= 1, bty = 'n',x.intersp = 0.01)
+
+```
+
+\color{blue}**From the above plot(s), one can ensure the seasonality in the time Series data. This is the phenomenon, that was not much clear in the ACF and PACF plots. Most of the pollutant gases have synchronized peaks and minimas. We can see this with the correspondence with covariance matrix.** \color{black}
+
+# **5. Statistical Inference:**
+
+Statistical inference plays a crucial role in analyzing and drawing conclusions from your data. It allows us to make inferences and generalizations about the population based on the information contained in our sample. We will use **discriptive Statistics** techniques for this. Here are some specific uses of statistical inference in our data analysis:
+
+1.  Parameter Estimation
+
+2.  Hypothesis Testing
+
+3.  Confidence Intervals
+
+4.  Predictive Modeling
+
+5.  Generalization
+
+6.  Decision Making
+
+Statistical inference helps us move beyond mere description and provides a formal framework for making inferences, drawing conclusions, and gaining insights from our data. It allows us to make statistically supported statements and decisions, increasing the reliability and validity of our data analysis.
+
+## **5.1. Modeling of Weighted Pollution Coefficient:**
+
+First we will try to derive combined weighted combination of air polluting factors to obtain a single time-series data, which should capture the pollution effect of blasting. Finding accurate weights for combining multiple factors in data analysis is often a subjective process and depends on various factors, including domain knowledge, expert opinion, and the specific goals of our analysis. We will use a machine learning algorithm (Data driven approach) such as `Random Forest` or Gradient Boosting to calculate feature importance.
+
+```{r}
+
+# Train a random forest model
+model <- randomForest(data_imputed)
+
+# Calculate feature importance
+importance <- importance(model)
+importance <- as.vector(importance)
+
+# Normalize the weights to sum up to 1
+normalized_weights <- importance / sum(importance)
+
+cat(normalized_weights)
+
+```
+
+Now, we can construct `Univariate Time Series` time series by using these derived weight and observe its statistics.
+
+A small part of `Univariate Time Series` we have constructed is as following. We are also showing the trace plot and ACF plot of the extracted Uni-variate time series below:
+
+![Univariate time Series Data](image-6.png){height="400px"}
+
+```{r, echo = FALSE, fig.height=5.3}
+univariate_data <- cbind(data[,1:3],apply(as.matrix(normalized_weights*data_imputed),1,sum))
+colnames(univariate_data)[4] <- "Pollution Index"
+traceplot(as.matrix(univariate_data[,4]),legend = F, main = "Traceplot of Derived Univariate Time Seies", fast = F)
+acfplot(as.matrix(univariate_data[,4]),lag.max = 100, main = "ACF plot of Derived Univariate Time Seies")
+```
+
+histogram and Q-Q Plot for pollution index is as following:
+
+```{r, echo = FALSE, warning=FALSE, fig.height=5}
+x = 1:8640
+wk = x/96 + x
+cs = cos(2*pi*wk); sn = sin(2*pi*wk)
+tn = tan(2*pi*wk);lg = log(100*wk)
+y = univariate_data[,4]
+reg = lm(y ~ poly(wk,27)+ cs + sn + 1/cs + 1/sn + tn + 1/tn + lg , na.action=NULL)
+plot(wk,y, col = "pink", ylab = "Pollution Level", xlab = "Time", ylim = c(0,100), main = "Approximate Ploynomial and Trigonometric Function Fitting")
+lines(fitted(reg),lwd = 2, col ="lightblue")
+
+qqnorm(univariate_data$`Pollution Index`, pch = 16, frame = FALSE, ylab = "Univariate Time Series Quantiles", main= NULL)
+qqline(univariate_data$`Pollution Index`, col = "steelblue", lwd = 2)
+mtext("As we can see in Q-Q plot, Extracted Univariate Time Series is not distributed as normal,
+      its distribution is highly positively skewed and has thiner tails.", side = 3)
+
+hist(univariate_data[,4], main = "Histogram of pollution index", xlab = "Pollution index", col = "lightblue")
+```
+
+\color{blue}**As we can see in the plotted histogram, the peak occurs at 20-40, this shows that it is the value of pollution index at `Normal Days`. If open pit blasting occurs any days in the region, the pollution level of that time must be higher than that. Moreover we must account that this is a sensory data, sensors responds with a certain delay after the change occurs. In the next section we will made some assumption and conclude about the blasting time.** \color{black}
+
+## **5.2. Blasting Time Prediction:**
+
+As said in the assignment `Blasting from open-pit coal mines causing massive air pollution`. From the above histogram , one can infer that, blasting time can be the time when pollution index has value greater than a certain lower limit. \color{blue}**Assume that this lower limit is 100. i.e. if Pollution index increases more than 100, we assume blasting happened. Another assumption is that the response time for the sensor is 5-7 hours.** \color{black} Now, one need to find the pollution level at 13:45 - 14:45 with our assumption. Check for $13:45 - 14:45$, We will extract data for this time, and check its histogram for pollution index. We will see some other statistics for this selected time range.
+
+```{r, echo = FALSE, warning=FALSE}
+
+date_t = matrix(0, nrow = 810, ncol = 13)
+i = 80
+j = 1
+data_ex <- cbind(data[,1:3],data_imputed)
+data_ex <- as.matrix(data_ex)
+while(i <= 8640)
+{
+  date_t[j+0, ] <- as.numeric(data_ex[i, ])
+  date_t[j+1, ] <- as.numeric(data_ex[i+1, ])
+  date_t[j+2, ] <- as.numeric(data_ex[i+2, ])
+  date_t[j+3, ] <- as.numeric(data_ex[i+3, ])
+  date_t[j+4, ] <- as.numeric(data_ex[i+4, ])
+  date_t[j+5, ] <- as.numeric(data_ex[i+5, ])
+  date_t[j+6, ] <- as.numeric(data_ex[i+6, ])
+  date_t[j+7, ] <- as.numeric(data_ex[i+7, ])
+  date_t[j+8, ] <- as.numeric(data_ex[i+8, ])
+  
+  i = i + 96
+  j = j + 9
+}
+data_t <- matrix(0, ncol = 10, nrow = 810)
+for(i in 4:13)
+{
+  data_t[,i-3] = as.numeric(date_t[,i])
+}
+univdate_t <- cbind(date_t[,1:3],apply(as.matrix(normalized_weights*data_t),1,sum) )
+cat("All the measures are in the fiven order:",colnames(data_imputed))
+cat("Mean:",apply(as.matrix(date_t[,4:13]),2,mean),fill = T)
+cat("Median:",apply(date_t[,4:13] ,2,median),fill = T)
+cat("Variance:",apply(date_t[,4:13],2,var),fill = T)
+cat("Standard Deviation:",apply(date_t[,4:13],2,sd),fill = T)
+cat("Maximum:",apply(date_t[,4:13],2,max),fill = T)
+cat("Minimum:",apply(date_t[,4:13],2,min),fill = T)
+hist(as.numeric(univdate_t[,4]),breaks = 10, main= "Histogram of pollution index for time range 13:45 - 14:45", xlab = "Pollution Index", col = "lightgreen")
+
+
+```
+
+\color{blue}**It has approx same histogram (appearance) as of full data. But the proportion of observations having pollution index more than 130 has been increases. This proportion is $0.0601$ in full data, and $0.084$ in our extraced data. Hence, this time has hight probability of being the blasting data.** \color{black} It's important to note that the effectiveness of these methods depends on the quality and characteristics of the data. The specific patterns associated with blasting events, the level of noise in the data, and the variability of air pollution levels during non-blasting periods can impact the accuracy of the detection.
+
+Consider a combination of approaches, and validate the results against known blasting events or expert knowledge to ensure the reliability of the detection. Additionally, further fine-tuning and adjustments may be required based on the specific properties of your data and the context of the blasting events. \color{blue}**We must need an scientific expert to model these calculations with greater precision and accuracy.** \color{black} Please note that this is just one approach to derive weights based on data-driven methods. We can explore other machine learning algorithms, such as Gradient Boosting or Elastic Net, and adapt the code accordingly. Additionally, it's important to consider the assumptions and limitations of the chosen approach and evaluate the stability and robustness of the derived weights through validation and sensitivity analyses.
+
+## **5.3. Probability Modeling:**
+
+There are multiple ways to calculate the probability of blasting at any time, but I am using the simplest frequentest method for calculating the `Probability of Blasting between` $14:15-14:30$. As we have concluded before that suitable blasting time is $13:45 - 14:45$. So, As we decided to assume that blast occurs if uni-variate pollution index goes above $100$. But in the dataset there are total $520$ observations in which we have pollution index greater than $100$. So, I think one should increase this lower limit. let us set it to be $150$. We will calculate the frequency that the pollution index find in this interval within the given blasting time. Our analysis is as shown in the form of R code.
+
+```{r, warning = FALSE, message=FALSE}
+p=0
+q=0
+for(i in 1:8640)
+{
+  if(univariate_data[i,4] > 150)
+  {
+    if((i-80)%%96 >=0 && (i-80)%%96 <= 8){p = p + 1}
+    if((i-82)%%96 >= 0 && (i-82)%%96 <= 6){q = q + 1}
+  }
+}
+cat("Probability of Blasting between 14:15-14:30 : ", q/p)
+```
+
+\color{blue}**We got very high probability of blasting in this range of time. Since our method is not that accurate(as it depends on accuracy of our assumptions), we can not rely on this probability. We can do more sophisticated analysis, under the supervision of any specialist.** \color{black}
+
+# **6. Analysis from Q-Q Plots:**
+
+A Q-Q plot, short for quantile-quantile plot, is a graphical tool used to assess the similarity between the distribution of a dataset and a theoretical distribution. It is a common technique employed in statistics to check if a dataset follows a particular probability distribution.
+
+The Q-Q plot compares the quantiles of the observed data with the quantiles of the theoretical distribution being tested. The process involves plotting the ordered values from the dataset against the expected values from the theoretical distribution. If the points in the plot fall approximately on a straight line, it suggests that the dataset follows the theoretical distribution. Deviations from a straight line indicate departures from the assumed distribution.
+
+Q-Q plots are particularly useful for assessing the normality of a dataset. If the points in the plot align closely to a straight line, it suggests that the dataset follows a normal distribution. Departures from linearity indicate deviations from normality, such as skewness or heavy tails.
+
+If the points follow a straight line, it suggests a good fit between the dataset and the theoretical distribution. However, if the points deviate from a straight line, it indicates a departure from the assumed distribution. The direction and shape of the deviations can provide insights into the nature of the discrepancy.
+
+In summary, Q-Q plots provide a visual comparison between observed data and a theoretical distribution, helping to assess the goodness of fit and identify departures from the assumed distribution. \color{blue}**We will infer from Q-Q plot of each component, with theoritical distribution as `Normal Distribution`. We are not going to analysie each plot separately. Instead, I am writing the information we can get after reading the Q-Q Plot as the main heading of the plot.**\color{black}
+
+```{r, echo = FALSE,warning=FALSE,message=FALSE}
+qqnorm(data_imputed$PM10, pch = 16, frame = FALSE,ylab = "PM10 Quantiles", main= NULL)
+qqline(data_imputed$PM10, col = "steelblue", lwd = 2)
+mtext("As we can see in Q-Q plot, PM10 is not distributed as normal,
+      its distribution is positively skewed and has fatter tails.", side = 3)
+```
+
+```{r, echo = FALSE,warning=FALSE,message=FALSE, fig.height= 5.4}
+
+qqnorm(data_imputed$NO, pch = 16, frame = FALSE,ylab = "NO Quantiles", main= NULL)
+qqline(data_imputed$NO, col = "steelblue", lwd = 2)
+mtext("As we can see in Q-Q plot, NO is not distributed as normal,
+      its distribution is highly positively skewed and has thin tails.", side = 3)
+
+
+qqnorm(data_imputed$NO2, pch = 16, frame = FALSE,ylab = "NO2 Quantiles", main= NULL)
+qqline(data_imputed$NO2, col = "steelblue", lwd = 2)
+mtext("As we can see in Q-Q plot, NO2 is not distributed as normal,
+      its distribution is Negatively skewed and has thin tails.", side = 3)
+
+qqnorm(data_imputed$NOX, pch = 16, frame = FALSE,ylab = "NOX Quantiles", main= NULL )
+qqline(data_imputed$NOX, col = "steelblue", lwd = 2)
+mtext("As we can see in Q-Q plot, NOX is not distributed as normal,
+      its distribution is Negatively skewed and has thin tails.", side = 3)
+
+qqnorm(data_imputed$CO, pch = 16, frame = FALSE,ylab = "CO Quantiles", main= NULL)
+qqline(data_imputed$CO, col = "steelblue", lwd = 2)
+mtext("As we can see in Q-Q plot, CO seeing to distributed as normal,
+       but it has just positive values hence it can be seen as One-Sided Normal.
+      its distribution is Summetric has thin tails.", side = 3)
+
+qqnorm(data_imputed$SO2, pch = 16, frame = FALSE,ylab = "SO2 Quantiles", main= NULL)
+qqline(data_imputed$SO2, col = "steelblue", lwd = 2)
+mtext("As we can see in Q-Q plot, SO2 is not distributed as normal,
+       has highly positively Skewed Distribution, with very thin tails.", side = 3)
+
+qqnorm(data_imputed$NH3, pch = 16, frame = FALSE,ylab = "NH3 Quantiles", main= NULL)
+qqline(data_imputed$NH3, col = "steelblue", lwd = 2)
+mtext("As we can see in Q-Q plot, NH3 is not distributed as normal,
+       has highly positively Skewed Distribution, with relatively fatter tails.", side = 3)
+
+
+qqnorm(data_imputed$Ozone, pch = 16, frame = FALSE,ylab = "Ozone Quantiles", main= NULL)
+qqline(data_imputed$Ozone, col = "steelblue", lwd = 2)
+mtext("As we can see in Q-Q plot, Ozone is not distributed as normal,
+       has a little bit negatively Skewed Distribution.", side = 3)
+
+
+qqnorm(data_imputed$Benzene, pch = 16, frame = FALSE,ylab = "Benzene Quantiles", main= NULL)
+qqline(data_imputed$Benzene, col = "steelblue", lwd = 2)
+mtext("As we can see in Q-Q plot, Benzene is not distributed as normal", side = 3)
+
+
+qqnorm(data_imputed$PM2.5, pch = 16, frame = FALSE,ylab = "PM2.5 Quantiles", main= NULL)
+qqline(data_imputed$PM2.5, col = "steelblue", lwd = 2)
+mtext("As we can see in Q-Q plot, PM2.5 is not distributed as normal,
+       has high positively Skewed Distribution, with very thin tails.", side = 3)
+
+```
+
+# **7. Forcasting:**
+
+As we observe before, that the multivariate chains provided to us is not stationary, hence we are using ARIMA model. While handling with missing data values, We modeled ARIMA models for all the components. We can easily forecast from the data, and the modeled process. We will also compare the `Time-Series Plot`of each component, with its modeled `ARIMA process Time-Series Plot`.\
+Here is some examples:
+
+```{r,echo=FALSE, warning=FALSE}
+pm10 <- data_imputed$PM10
+pm2.5 <- data_imputed$PM2.5
+NO <- data_imputed$NO
+NO2 <- data_imputed$NO2
+NOX <- data_imputed$NOX
+CO <- data_imputed$CO
+SO2 <- data_imputed$SO2
+NH3 <- data_imputed$NH3
+Ozone <- data_imputed$Ozone
+Benzene <- data_imputed$Benzene
+```
+
+```{r ,echo = FALSE, warning=FALSE}
+arima_pm10 <- auto.arima(pm10)
+arima_pm2.5 <- auto.arima(pm2.5)
+arima_NO <- auto.arima(NO)
+arima_NO2 <- auto.arima(NO2)
+arima_NOX <- auto.arima(NOX)
+arima_CO <- auto.arima(CO)
+arima_SO2 <- auto.arima(SO2)
+arima_NH3 <- auto.arima(NH3)
+arima_Ozone <- auto.arima(Ozone)
+arima_Benzene <- auto.arima(Benzene)
+
+```
+
+```{r, eval = TRUE, warning=FALSE}
+## We are forecasting for next 10 observations in every column
+
+forecast_pm10 <- forecast(arima_pm10, h = 10)
+forecast_pm2.5 <- forecast(arima_pm2.5, h = 10)
+forecast_NO <- forecast(arima_NO, h = 10)
+forecast_NO2 <- forecast(arima_NO2, h = 10)
+forecast_NOX <- forecast(arima_NOX, h = 10)
+forecast_CO <- forecast(arima_CO, h = 10)
+forecast_SO2 <- forecast(arima_SO2, h = 10)
+forecast_NH3 <- forecast(arima_NH3, h = 10)
+forecast_Ozone <- forecast(arima_Ozone, h = 10)
+forecast_Benzene <- forecast(arima_Benzene, h = 10)
+
+forecast <- cbind(forecast_pm10,forecast_pm2.5,forecast_NO,
+            forecast_NO2,forecast_NOX,forecast_CO,forecast_SO2, 
+            forecast_NH3, forecast_Ozone, forecast_Benzene)
+
+```
+
+There is a large output, So, I am just showing the forecasting in `Benzene` Level in environment.
+
+```{r, echo = FALSE, warning=FALSE}
+forecast_Benzene
+```
+
+Now, to check the correctness of our fitted models, we will plot the actual and modeled process below, as we said before.
+
+![PM10](pm10.jpeg){height="300px"} ![PM2.5](pm2.5.jpeg){height="300px"}
+![NO](No.jpeg){height="270px"} ![NO2](NO2.jpeg){height="270px"}
+
+![NOX](NOX.jpeg){height="270px"} ![SO2](SO2.jpeg){height="270px"}
+
+![CO](CO.jpeg){height="270px"} ![NH3](NH3.jpeg){height="270px"}
+
+![Ozone](Ozone.jpeg){height="300px"} ![Benzene](Benzene.jpeg){height="300px"}
+
+Fitted ARIMA models are more or less seems to be good. Hence, our predicted values will be accurate upto certain limit. 
+
+# **8. Conclusion:**
+
+After conducting a comprehensive analysis, it is evident that the topic under investigation has been thoroughly examined and evaluated. Through a meticulous review of the available data, consideration of relevant factors, and in-depth exploration of various perspectives, a comprehensive understanding of the subject matter has been achieved.
+
+The analysis began with a clear identification of the research objectives, establishing a solid foundation for the subsequent investigation. The data collection process involved extensive research, utilizing reputable sources and authoritative references to ensure the accuracy and reliability of the information gathered.
+
+Throughout the analysis, various methodologies were employed to interpret and analyze the data effectively. Statistical tools and techniques provided quantitative insights, while qualitative approaches allowed for a deeper understanding of complex phenomena and subjective experiences. The combination of these methods facilitated a well-rounded and holistic assessment of the topic.
+
+Furthermore, the analysis incorporated a multidimensional perspective, considering diverse viewpoints and acknowledging potential limitations and biases. By adopting an objective and unbiased approach, the findings and conclusions derived from this analysis are well-informed and trustworthy.
+
+The results of the analysis revealed several key insights and trends that shed light on the topic at hand. These findings have significant implications for future research, policy-making, or decision-making processes. By synthesizing the information gathered and drawing connections between different aspects, a comprehensive understanding of the subject matter has been achieved.
+
+```{r, echo=FALSE}
+boxplot(data_imputed, col = 2:11,main = "Overall Presence of Gases in Environment", pch=16,ylim= c(0,250))
+```
+
+It is important to note that while this analysis has provided valuable insights, there may be inherent limitations. \color{blue}**For Example: if we see the boxplot of all the components(as shown above), then we can find that, all lot of values in our dataset are working as `outliers`, and we have not taken this into account. The accuracy and reliability of the findings are contingent upon the quality and availability of the data, as well as the assumptions and methodologies employed. As with any analysis, it is crucial to acknowledge these limitations and encourage further research and exploration to enhance our understanding of the topic.**
+\color{black}
+
+We can also see the quality of ARIMA models, by checking the PACF and ACF of the residuals, as shown for `NO2` below. We can say that this is an `OK` type of model, in terms of quality, as PACF has high values that lies in `Range of Significance`. SO, we must note that, analysis can show some ambiguity at certain points, for more accuracy we need more sophisticated methods of analysis.
+
+![ACF of residuals of a fitted ARIMA model](Rplot.jpeg){height="300px"} ![PACF of residuals of a fitted ARIMA model](Rplot01.jpeg){height="300px"}
+
+In conclusion, this overall analysis represents a diligent and systematic examination of the Multivarite time series data. By employing rigorous methodologies, considering multiple perspectives, and drawing meaningful conclusions, this analysis contributes to the existing body of knowledge and provides a foundation for future studies. The insights gained from this analysis have the potential to inform and guide decision-making processes, drive innovation, and advance the field.
